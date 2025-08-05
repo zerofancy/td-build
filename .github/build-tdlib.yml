@@ -1,0 +1,86 @@
+name: Build TDLib
+
+on:
+  # push:
+    # branches: [ main ]
+  # pull_request:
+    # branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-tdlib:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        architecture: x64
+        
+    - name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        architecture: x64
+        
+    - name: Install CMake
+      uses: lukka/get-cmake@latest
+      
+    - name: Clone TDLib repository
+      run: |
+        git clone https://github.com/tdlib/td.git
+        cd td
+        git clone https://github.com/Microsoft/vcpkg.git
+        cd vcpkg
+        git checkout bc3512a509f9d29b37346a7e7e929f9a26e66c7e
+      shell: powershell
+      
+    - name: Bootstrap vcpkg
+      run: |
+        cd td/vcpkg
+        ./bootstrap-vcpkg.bat
+      shell: powershell
+      
+    - name: Install dependencies with vcpkg
+      run: |
+        cd td/vcpkg
+        ./vcpkg.exe install gperf:x64-windows openssl:x64-windows zlib:x64-windows
+      shell: powershell
+      
+    - name: Build and install TDLib
+      run: |
+        cd td
+        Remove-Item build -Force -Recurse -ErrorAction SilentlyContinue
+        mkdir build
+        cd build
+        cmake -A x64 -DCMAKE_INSTALL_PREFIX:PATH=../example/java/td -DTD_ENABLE_JNI=ON -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../vcpkg/scripts/buildsystems/vcpkg.cmake ..
+        cmake --build . --target install --config Release
+      shell: powershell
+      
+    - name: Build and install Java example
+      run: |
+        cd td/example/java
+        Remove-Item build -Force -Recurse -ErrorAction SilentlyContinue
+        mkdir build
+        cd build
+        $tdDir = Resolve-Path ../td/lib/cmake/Td
+        cmake -A x64 -DCMAKE_INSTALL_PREFIX:PATH=../../../tdlib -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../../../vcpkg/scripts/buildsystems/vcpkg.cmake -DTd_DIR:PATH=$tdDir ..
+        cmake --build . --target install --config Release
+      shell: powershell
+      
+    - name: List output directory
+      run: |
+        cd td
+        dir tdlib
+      shell: powershell
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: tdlib-build
+        path: td/tdlib/
