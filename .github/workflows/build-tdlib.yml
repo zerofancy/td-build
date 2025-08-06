@@ -78,9 +78,20 @@ jobs:
         cd td
         dir tdlib
       shell: powershell
+    
+    # 打包Java类为JAR
+    - name: Package Java classes into JAR
+      run: |
+        cd td/tdlib/bin
+        jar cvf tdlib.jar org/
+        # 将JAR移动到更容易找到的位置
+        mv tdlib.jar ../
+      shell: powershell
       
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: tdlib-build
-        path: td/tdlib/
+        path: |
+          td/tdlib/
+          td/tdlib/tdlib.jar
