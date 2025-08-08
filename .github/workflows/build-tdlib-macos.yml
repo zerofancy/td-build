@@ -1,0 +1,81 @@
+name: Build TDLib for macOS (Apple Silicon)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-macos:
+    # 使用GitHub的macOS最新环境（基于Apple Silicon）
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install Xcode command line tools
+        run: xcode-select --install
+      
+      - name: Install Homebrew
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      
+      - name: Install dependencies via Homebrew
+        run: |
+          brew install gperf cmake openssl coreutils openjdk
+      
+      - name: Clone TDLib repository
+        run: |
+          git clone https://github.com/tdlib/td.git
+          cd td
+          git submodule update --init --recursive  # 确保子模块正确初始化
+      
+      - name: Build and install TDLib core
+        run: |
+          cd td
+          rm -rf build
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DJAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home/ \
+                -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl/ \
+                -DCMAKE_INSTALL_PREFIX:PATH=../example/java/td \
+                -DTD_ENABLE_JNI=ON ..
+          cmake --build . --target install --config Release
+      
+      - name: Build and install Java example
+        run: |
+          cd td/example/java
+          rm -rf build
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DJAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home/ \
+                -DCMAKE_INSTALL_PREFIX:PATH=../../../tdlib \
+                -DTd_DIR:PATH=$(greadlink -e ../td/lib/cmake/Td) ..
+          cmake --build . --target install --config Release
+      
+      - name: List build output
+        run: |
+          cd td
+          ls -l tdlib
+          ls -l tdlib/bin
+          ls -l tdlib/lib
+      
+      - name: Package JAR with main class
+        run: |
+          cd td/tdlib/bin
+          jar cvfe tdlib.jar org.drinkless.tdlib.example.Example .
+          mv tdlib.jar ../
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tdlib-macos-build
+          path: |
+            td/tdlib/
+            td/tdlib/tdlib.jar
+          retention-days: 30  #  artifacts保留30天
