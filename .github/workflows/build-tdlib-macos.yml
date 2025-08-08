@@ -72,7 +72,7 @@ jobs:
           cd td
           ls -l tdlib
           ls -l tdlib/bin
-          ls -l tdlib/lib
+          ls -l tdlib/docs
       
       - name: Package JAR with main class
         run: |
