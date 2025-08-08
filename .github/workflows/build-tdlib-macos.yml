@@ -1,27 +1,36 @@
 name: Build TDLib for macOS (Apple Silicon)
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build-macos:
-    # 使用GitHub的macOS最新环境（基于Apple Silicon）
-    runs-on: macos-latest
+    runs-on: macos-15
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Install Xcode command line tools
-        run: xcode-select --install
-      
-      - name: Install Homebrew
+      - name: Install Xcode command line tools (if missing)
         run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          # 检查是否已安装命令行工具
+          if ! xcode-select -p &> /dev/null; then
+            echo "Installing Xcode command line tools..."
+            xcode-select --install
+            # 等待安装完成（最多等待5分钟）
+            sleep 300
+          else
+            echo "Xcode command line tools are already installed"
+          fi
+      
+      - name: Install Homebrew (if missing)
+        run: |
+          if ! command -v brew &> /dev/null; then
+            echo "Installing Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          else
+            echo "Homebrew is already installed"
+          fi
       
       - name: Install dependencies via Homebrew
         run: |
@@ -31,7 +40,7 @@ jobs:
         run: |
           git clone https://github.com/tdlib/td.git
           cd td
-          git submodule update --init --recursive  # 确保子模块正确初始化
+          git submodule update --init --recursive
       
       - name: Build and install TDLib core
         run: |
@@ -78,4 +87,4 @@ jobs:
           path: |
             td/tdlib/
             td/tdlib/tdlib.jar
-          retention-days: 30  #  artifacts保留30天
+          retention-days: 30
