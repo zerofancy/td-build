@@ -60,8 +60,10 @@ jobs:
           rm -rf build
           mkdir -p build
           cd build
-          # 明确指定CMake最低版本策略，并使用最新CMake特性
+          # 修复CMake版本兼容性问题
           cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW \
+                -DCMAKE_MINIMUM_REQUIRED_VERSION=3.5 \
+                -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DOPENSSL_ROOT_DIR=$(brew --prefix openssl) \
                 -DCMAKE_INSTALL_PREFIX:PATH=../example/java/td \
@@ -75,6 +77,8 @@ jobs:
           mkdir -p build
           cd build
           cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW \
+                -DCMAKE_MINIMUM_REQUIRED_VERSION=3.5 \
+                -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX:PATH=../../../tdlib \
                 -DTd_DIR:PATH=$(greadlink -e ../td/lib/cmake/Td) ..
