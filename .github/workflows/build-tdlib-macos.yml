@@ -1,6 +1,8 @@
 name: Build TDLib for macOS (Apple Silicon)
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -10,7 +12,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Read specific commit hash from file
+        id: get-commit
+        run: |
+          # 假设commit哈希存储在仓库根目录的tdlib-commit.txt文件中
+          COMMIT_HASH=$(cat tdlib-commit.txt)
+          echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
+          echo "Read commit hash: $COMMIT_HASH"
+        
       - name: Install Xcode command line tools (if missing)
         run: |
           # 检查是否已安装命令行工具
@@ -41,7 +51,12 @@ jobs:
           git clone https://github.com/tdlib/td.git
           cd td
           git submodule update --init --recursive
-      
+      - name: Checkout specific commit
+        run: |
+          cd td
+          git checkout $COMMIT_HASH
+          echo "Checked out commit: $COMMIT_HASH"
+          
       - name: Build and install TDLib core
         run: |
           cd td

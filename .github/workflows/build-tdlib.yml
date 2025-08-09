@@ -1,8 +1,8 @@
 name: Build TDLib
 
 on:
-  # push:
-    # branches: [ main ]
+  push:
+    branches: [ main ]
   # pull_request:
     # branches: [ main ]
   workflow_dispatch:  # 允许手动触发
@@ -14,7 +14,15 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
+    - name: Read specific commit hash from file
+      id: get-commit
+      run: |
+        # 假设commit哈希存储在仓库根目录的tdlib-commit.txt文件中
+        COMMIT_HASH=$(cat tdlib-commit.txt)
+        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
+        echo "Read commit hash: $COMMIT_HASH"
+
     - name: Set up PHP
       uses: shivammathur/setup-php@v2
       with:
@@ -51,7 +59,12 @@ jobs:
         cd td/vcpkg
         ./vcpkg.exe install gperf:x64-windows openssl:x64-windows zlib:x64-windows
       shell: powershell
-      
+    - name: Checkout specific commit
+      run: |
+        cd td
+        git checkout $COMMIT_HASH
+        echo "Checked out commit: $COMMIT_HASH"
+        
     - name: Build and install TDLib
       run: |
         cd td
@@ -79,11 +92,10 @@ jobs:
         dir tdlib
       shell: powershell
     
-    # 打包Java类为JAR
     - name: Package Java classes into JAR
       run: |
         cd td/tdlib/bin
-        jar cvf tdlib.jar org/
+        jar cvfe tdlib.jar org.drinkless.tdlib.example.Example .
         # 将JAR移动到更容易找到的位置
         mv tdlib.jar ../
       shell: powershell
@@ -95,3 +107,5 @@ jobs:
         path: |
           td/tdlib/
           td/tdlib/tdlib.jar
+        retention-days: 30
+

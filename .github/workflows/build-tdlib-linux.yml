@@ -1,6 +1,10 @@
 name: Build TDLib on Ubuntu 22.04
 
 on:
+  push:
+    branches: [ main ]
+  # pull_request:
+    # branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -9,8 +13,16 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4  # 同时更新checkout动作到最新版本
+      uses: actions/checkout@v4
       
+    - name: Read specific commit hash from file
+      id: get-commit
+      run: |
+        # 假设commit哈希存储在仓库根目录的tdlib-commit.txt文件中
+        COMMIT_HASH=$(cat tdlib-commit.txt)
+        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
+        echo "Read commit hash: $COMMIT_HASH"
+        
     - name: Update and upgrade system packages
       run: |
         sudo apt-get update
@@ -23,6 +35,12 @@ jobs:
     - name: Clone TDLib repository
       run: |
         git clone https://github.com/tdlib/td.git
+        
+    - name: Checkout specific commit
+      run: |
+        cd td
+        git checkout $COMMIT_HASH
+        echo "Checked out commit: $COMMIT_HASH"
         
     - name: Build and install TDLib
       run: |
@@ -41,14 +59,24 @@ jobs:
         cmake --build . --target install
         cd ../../..
         cd ..
-        
-    - name: List build results
+
+    - name: List build output
       run: |
-        ls -l td/tdlib
-        
-    - name: Upload TDLib artifacts
-      uses: actions/upload-artifact@v4  # 更新为最新的v4版本
+        cd td
+        ls -l tdlib
+        ls -l tdlib/bin
+        ls -l tdlib/docs
+    - name: Package JAR with main class
+      run: |
+        cd td/tdlib/bin
+        jar cvfe tdlib.jar org.drinkless.tdlib.example.Example .
+        mv tdlib.jar ../
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
       with:
-        name: tdlib-binaries
-        path: td/tdlib/
-        retention-days: 30  # 可选：设置artifact保留天数
+        name: tdlib-linux-build
+        path: |
+          td/tdlib/
+          td/tdlib/tdlib.jar
+        retention-days: 30
