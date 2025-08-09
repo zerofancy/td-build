@@ -80,8 +80,10 @@ jobs:
         }
         New-Item -ItemType Directory -Path "build" | Out-Null
         cd build
-        # Windows特定CMake配置：指定架构、工具链和生成器
+        # Windows特定CMake配置：添加版本兼容性参数
         cmake -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_MINIMUM_REQUIRED_VERSION=3.5 `
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
           -DCMAKE_INSTALL_PREFIX:PATH=../example/java/td `
           -DTD_ENABLE_JNI=ON `
           -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../vcpkg/scripts/buildsystems/vcpkg.cmake `
@@ -101,6 +103,8 @@ jobs:
         # 正确解析Td_DIR路径（PowerShell的Resolve-Path处理）
         $tdDir = Resolve-Path ../td/lib/cmake/Td | Select-Object -ExpandProperty Path
         cmake -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_MINIMUM_REQUIRED_VERSION=3.5 `
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
           -DCMAKE_INSTALL_PREFIX:PATH=../../../tdlib `
           -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../../../vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DTd_DIR:PATH="$tdDir" `
@@ -137,3 +141,4 @@ jobs:
           td/tdlib/
           td/tdlib/tdlib.jar
         retention-days: 30
+    
