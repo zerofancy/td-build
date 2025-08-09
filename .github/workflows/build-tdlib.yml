@@ -17,9 +17,8 @@ jobs:
       id: get-commit
       shell: powershell
       run: |
-        # 在PowerShell中正确读取文件内容（去除换行和空格）
         $COMMIT_HASH = Get-Content tdlib-commit.txt -Raw | Select-Object -First 1
-        $COMMIT_HASH = $COMMIT_HASH.Trim()  # 移除可能的空格和换行符
+        $COMMIT_HASH = $COMMIT_HASH.Trim()
         echo "COMMIT_HASH=$COMMIT_HASH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         echo "Read commit hash: $COMMIT_HASH"
 
@@ -36,33 +35,33 @@ jobs:
         distribution: 'temurin'
         architecture: x64
         
-    - name: Install CMake
+    - name: Install CMake (3.10+)
       uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: 3.27.0  # 指定明确的3.10+版本，避免默认版本问题
       
     - name: Clone TDLib repository
       shell: powershell
       run: |
         git clone https://github.com/tdlib/td.git
         cd td
-        # 克隆vcpkg并使用已知稳定版本
         git clone https://github.com/Microsoft/vcpkg.git
         cd vcpkg
-        git checkout bc3512a509f9d29b37346a7e7e929f9a26e66c7e
+        git checkout bc3512a509f9d29b37346a7e7e929f9a26e66c7e  # 稳定版本
       
     - name: Bootstrap vcpkg
       shell: powershell
       run: |
         cd td/vcpkg
         ./bootstrap-vcpkg.bat
-        # 确保vcpkg可执行文件在PATH中
         echo "${{ github.workspace }}\td\vcpkg" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       
     - name: Install dependencies with vcpkg
       shell: powershell
       run: |
         vcpkg install gperf:x64-windows openssl:x64-windows zlib:x64-windows
-        vcpkg integrate install  # 全局集成vcpkg工具链
-        
+        vcpkg integrate install
+      
     - name: Checkout specific TDLib commit
       shell: powershell
       run: |
@@ -74,44 +73,38 @@ jobs:
       shell: powershell
       run: |
         cd td
-        # 清理旧构建目录（PowerShell语法）
-        if (Test-Path "build") {
-          Remove-Item "build" -Recurse -Force
-        }
+        if (Test-Path "build") { Remove-Item "build" -Recurse -Force }
         New-Item -ItemType Directory -Path "build" | Out-Null
         cd build
-        # Windows特定CMake配置：添加版本兼容性参数
+        # 修复：使用符合格式的3.10版本（TDLib要求的最低版本）
         cmake -G "Visual Studio 17 2022" -A x64 `
-          -DCMAKE_MINIMUM_REQUIRED_VERSION=3.5 `
-          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+          -DCMAKE_MINIMUM_REQUIRED_VERSION=3.10 `
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.10 `
           -DCMAKE_INSTALL_PREFIX:PATH=../example/java/td `
           -DTD_ENABLE_JNI=ON `
           -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../vcpkg/scripts/buildsystems/vcpkg.cmake `
           ..
-        # 构建并安装（Release配置）
         cmake --build . --target install --config Release
       
     - name: Build and install Java example
       shell: powershell
       run: |
         cd td/example/java
-        if (Test-Path "build") {
-          Remove-Item "build" -Recurse -Force
-        }
+        if (Test-Path "build") { Remove-Item "build" -Recurse -Force }
         New-Item -ItemType Directory -Path "build" | Out-Null
         cd build
-        # 正确解析Td_DIR路径（PowerShell的Resolve-Path处理）
         $tdDir = Resolve-Path ../td/lib/cmake/Td | Select-Object -ExpandProperty Path
+        # 同样修复版本参数格式
         cmake -G "Visual Studio 17 2022" -A x64 `
-          -DCMAKE_MINIMUM_REQUIRED_VERSION=3.5 `
-          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+          -DCMAKE_MINIMUM_REQUIRED_VERSION=3.10 `
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.10 `
           -DCMAKE_INSTALL_PREFIX:PATH=../../../tdlib `
           -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../../../vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DTd_DIR:PATH="$tdDir" `
           ..
         cmake --build . --target install --config Release
       
-    - name: List output directory (debug)
+    - name: Package and upload artifacts
       shell: powershell
       run: |
         cd td
