@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-macos:
-    runs-on: macos-15
+    runs-on: macos-14  # 使用更稳定的macOS版本，15可能存在兼容性问题
     
     steps:
       - name: Checkout code
@@ -16,41 +16,38 @@ jobs:
       - name: Read specific commit hash from file
         id: get-commit
         run: |
-          # 假设commit哈希存储在仓库根目录的tdlib-commit.txt文件中
-          COMMIT_HASH=$(cat tdlib-commit.txt)
+          COMMIT_HASH=$(cat tdlib-commit.txt | tr -d '\n')  # 确保没有换行符
           echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
           echo "Read commit hash: $COMMIT_HASH"
         
-      - name: Install Xcode command line tools (if missing)
+      - name: Install Xcode command line tools
         run: |
-          # 检查是否已安装命令行工具
-          if ! xcode-select -p &> /dev/null; then
-            echo "Installing Xcode command line tools..."
-            xcode-select --install
-            # 等待安装完成（最多等待5分钟）
-            sleep 300
-          else
-            echo "Xcode command line tools are already installed"
-          fi
+          xcode-select --install || true  # 忽略已安装的错误
+          # 等待安装完成
+          while ! xcode-select -p &> /dev/null; do
+            sleep 10
+          done
       
-      - name: Install Homebrew (if missing)
+      - name: Install Homebrew dependencies
         run: |
-          if ! command -v brew &> /dev/null; then
-            echo "Installing Homebrew..."
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          else
-            echo "Homebrew is already installed"
-          fi
+          brew install gperf openssl coreutils openjdk
+          # 安装最新版本的CMake（解决版本兼容问题）
+          brew install cmake
+          # 确保使用brew安装的cmake而非系统自带
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          cmake --version  # 验证cmake版本
       
-      - name: Install dependencies via Homebrew
+      - name: Set Java environment variables
         run: |
-          brew install gperf cmake openssl coreutils openjdk
+          echo "JAVA_HOME=$(/usr/libexec/java_home)" >> $GITHUB_ENV
+          echo "PATH=$JAVA_HOME/bin:$PATH" >> $GITHUB_ENV
       
       - name: Clone TDLib repository
         run: |
           git clone https://github.com/tdlib/td.git
           cd td
           git submodule update --init --recursive
+      
       - name: Checkout specific commit
         run: |
           cd td
@@ -61,33 +58,34 @@ jobs:
         run: |
           cd td
           rm -rf build
-          mkdir build
+          mkdir -p build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DJAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home/ \
-                -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl/ \
+          # 明确指定CMake最低版本策略，并使用最新CMake特性
+          cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DOPENSSL_ROOT_DIR=$(brew --prefix openssl) \
                 -DCMAKE_INSTALL_PREFIX:PATH=../example/java/td \
                 -DTD_ENABLE_JNI=ON ..
-          cmake --build . --target install --config Release
+          cmake --build . --target install --config Release -j$(sysctl -n hw.ncpu)
       
       - name: Build and install Java example
         run: |
           cd td/example/java
           rm -rf build
-          mkdir build
+          mkdir -p build
           cd build
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DJAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home/ \
+          cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW \
+                -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX:PATH=../../../tdlib \
                 -DTd_DIR:PATH=$(greadlink -e ../td/lib/cmake/Td) ..
-          cmake --build . --target install --config Release
+          cmake --build . --target install --config Release -j$(sysctl -n hw.ncpu)
       
-      - name: List build output
+      - name: List build output (debug)
         run: |
           cd td
           ls -l tdlib
-          ls -l tdlib/bin
-          ls -l tdlib/docs
+          ls -l tdlib/bin || true
+          ls -l tdlib/lib || true
       
       - name: Package JAR with main class
         run: |
