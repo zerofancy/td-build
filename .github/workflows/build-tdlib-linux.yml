@@ -1,6 +1,10 @@
 name: Build TDLib on Ubuntu 22.04
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -9,7 +13,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4  # 同时更新checkout动作到最新版本
       
     - name: Update and upgrade system packages
       run: |
@@ -47,7 +51,8 @@ jobs:
         ls -l td/tdlib
         
     - name: Upload TDLib artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # 更新为最新的v4版本
       with:
         name: tdlib-binaries
         path: td/tdlib/
+        retention-days: 30  # 可选：设置artifact保留天数
