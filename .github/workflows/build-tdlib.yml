@@ -1,10 +1,8 @@
-name: Build TDLib
+name: Build TDLib on Windows
 
 on:
   push:
     branches: [ main ]
-  # pull_request:
-    # branches: [ main ]
   workflow_dispatch:  # 允许手动触发
 
 jobs:
@@ -15,12 +13,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Read specific commit hash from file
+    - name: Read specific commit hash from file (PowerShell)
       id: get-commit
+      shell: powershell
       run: |
-        # 假设commit哈希存储在仓库根目录的tdlib-commit.txt文件中
-        COMMIT_HASH=$(cat tdlib-commit.txt)
-        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
+        # 在PowerShell中正确读取文件内容（去除换行和空格）
+        $COMMIT_HASH = Get-Content tdlib-commit.txt -Raw | Select-Object -First 1
+        $COMMIT_HASH = $COMMIT_HASH.Trim()  # 移除可能的空格和换行符
+        echo "COMMIT_HASH=$COMMIT_HASH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         echo "Read commit hash: $COMMIT_HASH"
 
     - name: Set up PHP
@@ -40,72 +40,100 @@ jobs:
       uses: lukka/get-cmake@latest
       
     - name: Clone TDLib repository
+      shell: powershell
       run: |
         git clone https://github.com/tdlib/td.git
         cd td
+        # 克隆vcpkg并使用已知稳定版本
         git clone https://github.com/Microsoft/vcpkg.git
         cd vcpkg
         git checkout bc3512a509f9d29b37346a7e7e929f9a26e66c7e
-      shell: powershell
       
     - name: Bootstrap vcpkg
+      shell: powershell
       run: |
         cd td/vcpkg
         ./bootstrap-vcpkg.bat
-      shell: powershell
+        # 确保vcpkg可执行文件在PATH中
+        echo "${{ github.workspace }}\td\vcpkg" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       
     - name: Install dependencies with vcpkg
-      run: |
-        cd td/vcpkg
-        ./vcpkg.exe install gperf:x64-windows openssl:x64-windows zlib:x64-windows
       shell: powershell
-    - name: Checkout specific commit
+      run: |
+        vcpkg install gperf:x64-windows openssl:x64-windows zlib:x64-windows
+        vcpkg integrate install  # 全局集成vcpkg工具链
+        
+    - name: Checkout specific TDLib commit
+      shell: powershell
       run: |
         cd td
-        git checkout $COMMIT_HASH
-        echo "Checked out commit: $COMMIT_HASH"
+        git checkout $env:COMMIT_HASH
+        echo "Checked out commit: $env:COMMIT_HASH"
         
     - name: Build and install TDLib
+      shell: powershell
       run: |
         cd td
-        Remove-Item build -Force -Recurse -ErrorAction SilentlyContinue
-        mkdir build
+        # 清理旧构建目录（PowerShell语法）
+        if (Test-Path "build") {
+          Remove-Item "build" -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path "build" | Out-Null
         cd build
-        cmake -A x64 -DCMAKE_INSTALL_PREFIX:PATH=../example/java/td -DTD_ENABLE_JNI=ON -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../vcpkg/scripts/buildsystems/vcpkg.cmake ..
+        # Windows特定CMake配置：指定架构、工具链和生成器
+        cmake -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_INSTALL_PREFIX:PATH=../example/java/td `
+          -DTD_ENABLE_JNI=ON `
+          -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../vcpkg/scripts/buildsystems/vcpkg.cmake `
+          ..
+        # 构建并安装（Release配置）
         cmake --build . --target install --config Release
-      shell: powershell
       
     - name: Build and install Java example
+      shell: powershell
       run: |
         cd td/example/java
-        Remove-Item build -Force -Recurse -ErrorAction SilentlyContinue
-        mkdir build
+        if (Test-Path "build") {
+          Remove-Item "build" -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path "build" | Out-Null
         cd build
-        $tdDir = Resolve-Path ../td/lib/cmake/Td
-        cmake -A x64 -DCMAKE_INSTALL_PREFIX:PATH=../../../tdlib -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../../../vcpkg/scripts/buildsystems/vcpkg.cmake -DTd_DIR:PATH=$tdDir ..
+        # 正确解析Td_DIR路径（PowerShell的Resolve-Path处理）
+        $tdDir = Resolve-Path ../td/lib/cmake/Td | Select-Object -ExpandProperty Path
+        cmake -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_INSTALL_PREFIX:PATH=../../../tdlib `
+          -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../../../vcpkg/scripts/buildsystems/vcpkg.cmake `
+          -DTd_DIR:PATH="$tdDir" `
+          ..
         cmake --build . --target install --config Release
-      shell: powershell
       
-    - name: List output directory
+    - name: List output directory (debug)
+      shell: powershell
       run: |
         cd td
-        dir tdlib
-      shell: powershell
-    
+        if (Test-Path "tdlib") {
+          dir tdlib -Recurse
+        } else {
+          echo "tdlib directory not found!"
+        }
+      
     - name: Package Java classes into JAR
+      shell: powershell
       run: |
         cd td/tdlib/bin
-        jar cvfe tdlib.jar org.drinkless.tdlib.example.Example .
-        # 将JAR移动到更容易找到的位置
-        mv tdlib.jar ../
-      shell: powershell
+        # 检查class文件是否存在
+        if (Test-Path "org/drinkless/tdlib/example/Example.class") {
+          jar cvfe tdlib.jar org.drinkless.tdlib.example.Example .
+          mv tdlib.jar ../
+        } else {
+          echo "Warning: Example.class not found, skipping JAR packaging"
+        }
       
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: tdlib-build
+        name: tdlib-windows-build
         path: |
           td/tdlib/
           td/tdlib/tdlib.jar
         retention-days: 30
-
